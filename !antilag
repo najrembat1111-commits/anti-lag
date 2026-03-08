@@ -1,48 +1,51 @@
 -- Wait for game load
 if not game:IsLoaded() then game.Loaded:Wait() end
 
-local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
 
--- 1. FIX THE ERROR: Instead of deleting SunRays, we just disable them.
--- This keeps CycleController happy because the object still exists.
-local function silenceLighting()
+-- 1. Lighting Fix (Prevents the SunRays crash)
+local function optimizeLighting()
     for _, effect in ipairs(Lighting:GetChildren()) do
-        -- Check for SunRays, Bloom, Blur, etc.
         if effect:IsA("PostEffect") or effect:IsA("SunRaysEffect") then
-            effect.Enabled = false -- GPU stops rendering it, but script doesn't crash
+            -- We disable instead of Destroy to stop the "Not a valid member" error
+            effect.Enabled = false 
         end
     end
-    -- Massive FPS boost: Turn off shadows
     Lighting.GlobalShadows = false
 end
 
--- 2. CLEAN WORKSPACE: Remove physical lag (Beams, Tools, etc.)
+-- 2. Smart Cleanup (Saves player items)
 local function cleanWorkspace()
     for _, item in ipairs(workspace:GetChildren()) do
-        -- Skip actual players
-        if Players:GetPlayerFromCharacter(item) then continue end
+        -- STEP A: Ignore actual players and their held items
+        if Players:GetPlayerFromCharacter(item) then 
+            continue 
+        end
         
-        -- Delete things that don't have scripts attached (safe to remove)
+        -- STEP B: Remove laggy objects that aren't attached to players
         if item:IsA("Beam") or item:IsA("Trail") or item:IsA("Explosion") then
             item:Destroy()
+        
+        -- STEP C: Only delete Tools/Accessories if they are SITTING ON THE GROUND
+        -- If they were in a player's hand, 'item' would be the Player Model (handled in Step A)
         elseif item:IsA("Tool") or item:IsA("Accessory") then
-            -- These are usually dropped items or laggy hats
             item:Destroy()
+            
+        -- STEP D: Remove NPCs or dead bodies (Models with Humanoids that aren't players)
         elseif item:IsA("Model") and item:FindFirstChildOfClass("Humanoid") then
-            -- Removes NPCs/Corpses
             item:Destroy()
         end
     end
 end
 
--- Run once for lighting
-silenceLighting()
+-- Run once
+optimizeLighting()
 
--- Run every 10 seconds for workspace cleanup
+-- Loop cleanup every 10 seconds
 task.spawn(function()
     while true do
         pcall(cleanWorkspace)
-        task.wait(10) 
+        task.wait(10)
     end
 end)
