@@ -1,44 +1,48 @@
-repeat task.wait() until game:IsLoaded()
+-- Wait for game load
+if not game:IsLoaded() then game.Loaded:Wait() end
 
+local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 
--- Use a Dictionary for O(1) lookup speed instead of looping players
-local playerCharacters = {}
-
-local function updatePlayerCache()
-    table.clear(playerCharacters)
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p.Character then
-            playerCharacters[p.Character] = true
+-- 1. FIX THE ERROR: Instead of deleting SunRays, we just disable them.
+-- This keeps CycleController happy because the object still exists.
+local function silenceLighting()
+    for _, effect in ipairs(Lighting:GetChildren()) do
+        -- Check for SunRays, Bloom, Blur, etc.
+        if effect:IsA("PostEffect") or effect:IsA("SunRaysEffect") then
+            effect.Enabled = false -- GPU stops rendering it, but script doesn't crash
         end
     end
+    -- Massive FPS boost: Turn off shadows
+    Lighting.GlobalShadows = false
 end
 
--- Only clean specific folders to avoid scanning the whole game
-local function clean()
-    updatePlayerCache()
-    
-    -- Using a more targeted approach than GetDescendants if possible
-    for _, o in ipairs(workspace:GetChildren()) do
-        -- Skip players immediately
-        if playerCharacters[o] then continue end
+-- 2. CLEAN WORKSPACE: Remove physical lag (Beams, Tools, etc.)
+local function cleanWorkspace()
+    for _, item in ipairs(workspace:GetChildren()) do
+        -- Skip actual players
+        if Players:GetPlayerFromCharacter(item) then continue end
         
-        if o:IsA("Beam") then
-            o:Destroy()
-        elseif o:IsA("Tool") then
-            o:Destroy()
-        elseif o:IsA("Model") and o:FindFirstChild("Humanoid") then
-            -- If it's a model with a humanoid but NOT a player, it's an NPC/Corpse
-            o:Destroy()
+        -- Delete things that don't have scripts attached (safe to remove)
+        if item:IsA("Beam") or item:IsA("Trail") or item:IsA("Explosion") then
+            item:Destroy()
+        elseif item:IsA("Tool") or item:IsA("Accessory") then
+            -- These are usually dropped items or laggy hats
+            item:Destroy()
+        elseif item:IsA("Model") and item:FindFirstChildOfClass("Humanoid") then
+            -- Removes NPCs/Corpses
+            item:Destroy()
         end
     end
 end
 
--- Run every 5 seconds instead of 0.7 to give the CPU a break
+-- Run once for lighting
+silenceLighting()
+
+-- Run every 10 seconds for workspace cleanup
 task.spawn(function()
     while true do
-        clean()
-        task.wait(5) 
+        pcall(cleanWorkspace)
+        task.wait(10) 
     end
 end)
