@@ -1,51 +1,30 @@
--- Wait for game load
-if not game:IsLoaded() then game.Loaded:Wait() end
-
-local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 
--- 1. Lighting Fix (Prevents the SunRays crash)
-local function optimizeLighting()
-    for _, effect in ipairs(Lighting:GetChildren()) do
-        if effect:IsA("PostEffect") or effect:IsA("SunRaysEffect") then
-            -- We disable instead of Destroy to stop the "Not a valid member" error
-            effect.Enabled = false 
-        end
+-- 1. Immediate Lighting Change
+Lighting.GlobalShadows = false
+for _, effect in ipairs(Lighting:GetChildren()) do
+    if effect:IsA("PostEffect") or effect:IsA("SunRaysEffect") then
+        effect.Enabled = false 
     end
-    Lighting.GlobalShadows = false
 end
 
--- 2. Smart Cleanup (Saves player items)
+-- 2. Simplified Cleanup Function
 local function cleanWorkspace()
     for _, item in ipairs(workspace:GetChildren()) do
-        -- STEP A: Ignore actual players and their held items
-        if Players:GetPlayerFromCharacter(item) then 
-            continue 
-        end
+        -- Skip actual players
+        if game.Players:GetPlayerFromCharacter(item) then continue end
         
-        -- STEP B: Remove laggy objects that aren't attached to players
-        if item:IsA("Beam") or item:IsA("Trail") or item:IsA("Explosion") then
-            item:Destroy()
-        
-        -- STEP C: Only delete Tools/Accessories if they are SITTING ON THE GROUND
-        -- If they were in a player's hand, 'item' would be the Player Model (handled in Step A)
-        elseif item:IsA("Tool") or item:IsA("Accessory") then
-            item:Destroy()
-            
-        -- STEP D: Remove NPCs or dead bodies (Models with Humanoids that aren't players)
-        elseif item:IsA("Model") and item:FindFirstChildOfClass("Humanoid") then
+        -- Remove everything else that matches the list
+        if item:IsA("Beam") or item:IsA("Trail") or item:IsA("Explosion") or 
+           item:IsA("Tool") or item:IsA("Accessory") or 
+          (item:IsA("Model") and item:FindFirstChildOfClass("Humanoid")) then
             item:Destroy()
         end
     end
 end
 
--- Run once
-optimizeLighting()
-
--- Loop cleanup every 10 seconds
-task.spawn(function()
-    while true do
-        pcall(cleanWorkspace)
-        task.wait(10)
-    end
-end)
+-- 3. Basic Loop
+while true do
+    cleanWorkspace()
+    task.wait(10)
+end
