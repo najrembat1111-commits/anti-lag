@@ -1,30 +1,44 @@
-local Lighting = game:GetService("Lighting")
+repeat task.wait() until game:IsLoaded()
 
--- 1. Immediate Lighting Change
-Lighting.GlobalShadows = false
-for _, effect in ipairs(Lighting:GetChildren()) do
-    if effect:IsA("PostEffect") or effect:IsA("SunRaysEffect") then
-        effect.Enabled = false 
-    end
-end
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
--- 2. Simplified Cleanup Function
-local function cleanWorkspace()
-    for _, item in ipairs(workspace:GetChildren()) do
-        -- Skip actual players
-        if game.Players:GetPlayerFromCharacter(item) then continue end
-        
-        -- Remove everything else that matches the list
-        if item:IsA("Beam") or item:IsA("Trail") or item:IsA("Explosion") or 
-           item:IsA("Tool") or item:IsA("Accessory") or 
-          (item:IsA("Model") and item:FindFirstChildOfClass("Humanoid")) then
-            item:Destroy()
+-- Use a Dictionary for O(1) lookup speed instead of looping players
+local playerCharacters = {}
+
+local function updatePlayerCache()
+    table.clear(playerCharacters)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character then
+            playerCharacters[p.Character] = true
         end
     end
 end
 
--- 3. Basic Loop
-while true do
-    cleanWorkspace()
-    task.wait(10)
+-- Only clean specific folders to avoid scanning the whole game
+local function clean()
+    updatePlayerCache()
+    
+    -- Using a more targeted approach than GetDescendants if possible
+    for _, o in ipairs(workspace:GetChildren()) do
+        -- Skip players immediately
+        if playerCharacters[o] then continue end
+        
+        if o:IsA("Beam") then
+            o:Destroy()
+        elseif o:IsA("Tool") then
+            o:Destroy()
+        elseif o:IsA("Model") and o:FindFirstChild("Humanoid") then
+            -- If it's a model with a humanoid but NOT a player, it's an NPC/Corpse
+            o:Destroy()
+        end
+    end
 end
+
+-- Run every 5 seconds instead of 0.7 to give the CPU a break
+task.spawn(function()
+    while true do
+        clean()
+        task.wait(5) 
+    end
+end)
